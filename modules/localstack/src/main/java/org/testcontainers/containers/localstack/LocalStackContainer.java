@@ -31,7 +31,6 @@ public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
     public static final String VERSION = "0.9.4";
 
     private final List<Service> services = new ArrayList<>();
-    private String hostnameExternal = null;
 
     public LocalStackContainer() {
         this(VERSION);
@@ -52,9 +51,18 @@ public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
 
         withEnv("SERVICES", services.stream().map(Service::getLocalStackName).collect(Collectors.joining(",")));
 
-        if (hostnameExternal != null) {
-            withEnv("HOSTNAME_EXTERNAL", hostnameExternal);
+        String hostnameExternalReason;
+        if (getEnvMap().containsKey("HOSTNAME_EXTERNAL")) {
+            // do nothing
+            hostnameExternalReason = "explicitly as environment variable";
+        } else if (getNetwork() != null && getNetworkAliases() != null && getNetworkAliases().size() >= 1) {
+            withEnv("HOSTNAME_EXTERNAL", getNetworkAliases().get(getNetworkAliases().size() - 1));  // use the last network alias set
+            hostnameExternalReason = "to match last network alias on container with non-default network";
+        } else {
+            withEnv("HOSTNAME_EXTERNAL", getContainerIpAddress());
+            hostnameExternalReason = "to match host-routable address for container";
         }
+        logger().info("HOSTNAME_EXTERNAL" + " environment variable set to {} ({})", getEnvMap().get("HOSTNAME_EXTERNAL"), hostnameExternalReason);
 
         for (Service service : services) {
             addExposedPort(service.getPort());
@@ -72,17 +80,6 @@ public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
     }
 
     /**
-     * Name of the host to expose the services externally (defaults to containerIpAddress).
-     * This host is used, e.g., when returning queue URLs from the SQS service to the client.
-     * @param hostname matching your container alias or the containerIpAddress in case of a remote docker daemon
-     * @return this container object
-     */
-    public LocalStackContainer withHostnameExternal(String hostname) {
-        this.hostnameExternal = hostname;
-        return self();
-    }
-
-    /**
      * Provides an endpoint configuration that is preconfigured to communicate with a given simulated service.
      * The provided endpoint configuration should be set in the AWS Java SDK when building a client, e.g.:
      * <pre><code>AmazonS3 s3 = AmazonS3ClientBuilder
@@ -91,6 +88,11 @@ public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
             .withCredentials(localstack.getDefaultCredentialsProvider())
             .build();
      </code></pre>
+     *
+     * <p><strong>Please note that this method is only intended to be used for configuring AWS SDK clients
+     * that are running on the test host. If other containers need to call this one, they should be configured
+     * specifically to do so using a Docker network and appropriate addressing.</strong></p>
+     *
      * @param service the service that is to be accessed
      * @return an {@link AwsClientBuilder.EndpointConfiguration}
      */
