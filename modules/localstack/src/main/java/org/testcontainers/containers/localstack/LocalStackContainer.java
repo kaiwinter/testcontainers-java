@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
 
     public static final String VERSION = "0.9.4";
+    private static final String HOSTNAME_EXTERNAL_ENV_VAR = "HOSTNAME_EXTERNAL";
 
     private final List<Service> services = new ArrayList<>();
 
@@ -52,17 +53,17 @@ public class LocalStackContainer extends GenericContainer<LocalStackContainer> {
         withEnv("SERVICES", services.stream().map(Service::getLocalStackName).collect(Collectors.joining(",")));
 
         String hostnameExternalReason;
-        if (getEnvMap().containsKey("HOSTNAME_EXTERNAL")) {
+        if (getEnvMap().containsKey(HOSTNAME_EXTERNAL_ENV_VAR)) {
             // do nothing
             hostnameExternalReason = "explicitly as environment variable";
         } else if (getNetwork() != null && getNetworkAliases() != null && getNetworkAliases().size() >= 1) {
-            withEnv("HOSTNAME_EXTERNAL", getNetworkAliases().get(getNetworkAliases().size() - 1));  // use the last network alias set
+            withEnv(HOSTNAME_EXTERNAL_ENV_VAR, getNetworkAliases().get(getNetworkAliases().size() - 1));  // use the last network alias set
             hostnameExternalReason = "to match last network alias on container with non-default network";
         } else {
-            withEnv("HOSTNAME_EXTERNAL", getContainerIpAddress());
+            withEnv(HOSTNAME_EXTERNAL_ENV_VAR, getContainerIpAddress());
             hostnameExternalReason = "to match host-routable address for container";
         }
-        logger().info("HOSTNAME_EXTERNAL" + " environment variable set to {} ({})", getEnvMap().get("HOSTNAME_EXTERNAL"), hostnameExternalReason);
+        logger().info(HOSTNAME_EXTERNAL_ENV_VAR + " environment variable set to {} ({})", getEnvMap().get(HOSTNAME_EXTERNAL_ENV_VAR), hostnameExternalReason);
 
         for (Service service : services) {
             addExposedPort(service.getPort());
